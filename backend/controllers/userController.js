@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Group = require('../models/Group');
+const { deleteFileByUrl } = require('../services/b2Service');
 
 const getUsers = async (req, res, next) => {
   try {
@@ -35,7 +36,7 @@ const updateUser = async (req, res, next) => {
     const user = await User.findOneAndUpdate(
       { _id: req.params.id, role: 'teacher' },
       { name: req.body.name, email: req.body.email, isActive: req.body.isActive },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!user) {
@@ -64,11 +65,14 @@ const deleteUser = async (req, res, next) => {
       });
     }
 
-    const user = await User.findOneAndDelete({ _id: id, role: 'teacher' });
+    const user = await User.findOne({ _id: id, role: 'teacher' });
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'Teacher not found' });
     }
+
+    await deleteFileByUrl(user.photo_url);
+    await user.deleteOne();
 
     return res.json({ success: true, message: 'Teacher deleted' });
   } catch (error) {

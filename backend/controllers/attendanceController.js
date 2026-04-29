@@ -86,11 +86,24 @@ const registerAttendance = async (req, res, next) => {
       rawAttendanceDate.getUTCDate(),
     ));
 
-    const record = await Attendance.findOneAndUpdate(
-      { lesson_id, student_id: studentId, date: attendanceDate },
-      { lesson_id, student_id: studentId, date: attendanceDate },
-      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
-    );
+    const existingAttendance = await Attendance.findOne({
+      lesson_id,
+      student_id: studentId,
+      date: attendanceDate,
+    });
+
+    if (existingAttendance) {
+      return res.status(409).json({
+        success: false,
+        message: 'Attendance for this student and session already exists',
+      });
+    }
+
+    const record = await Attendance.create({
+      lesson_id,
+      student_id: studentId,
+      date: attendanceDate,
+    });
 
     return res.status(201).json({ success: true, data: record });
   } catch (error) {

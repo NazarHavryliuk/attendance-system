@@ -1,13 +1,38 @@
 import axios from 'axios';
 
+const resolveApiBaseUrl = () => {
+  const hostname = window.location.hostname;
+  if (hostname.endsWith('.netlify.app')) {
+    return 'https://attendance-system-k2jn.onrender.com/api';
+  }
+
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) {
+    return envUrl;
+  }
+
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+  if (isLocal) {
+    return 'http://localhost:3000/api';
+  }
+
+  return 'http://localhost:3000/api';
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
+const API_KEY = import.meta.env.VITE_API_KEY || '';
+
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 api.interceptors.request.use((config) => {
+  if (API_KEY) {
+    config.headers['x-api-key'] = API_KEY;
+  }
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

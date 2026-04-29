@@ -14,6 +14,7 @@ const DAY_OPTIONS = [
 
 const Lessons = () => {
   const { user } = useAuth();
+  const canManageAttendance = user.role === 'teacher';
   const [lessons, setLessons] = useState([]);
   const [groups, setGroups] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -39,6 +40,8 @@ const Lessons = () => {
   const [matrixLessonId, setMatrixLessonId] = useState(null);
   const [matrixData, setMatrixData] = useState(null);
   const [matrixLoading, setMatrixLoading] = useState(false);
+  const [attendanceSessions, setAttendanceSessions] = useState([]);
+  const [attendanceSessionId, setAttendanceSessionId] = useState('');
 
   const loadData = async () => {
     try {
@@ -207,7 +210,7 @@ const Lessons = () => {
       {user.role === 'admin' && (
         <form className="card" onSubmit={submitLesson}>
           <h3>Створити заняття</h3>
-          <div className="form-grid">
+          <div className="lesson-create-grid">
             <input
               placeholder="Предмет"
               value={lessonForm.subject}
@@ -261,69 +264,97 @@ const Lessons = () => {
               onChange={(e) => setLessonForm({ ...lessonForm, end_time: e.target.value })}
               required
             />
+          </div>
+          <div style={{ marginTop: '12px' }}>
             <button type="submit">Створити</button>
           </div>
         </form>
       )}
 
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>Предмет</th>
-              <th>Група</th>
-              <th>Викладач</th>
-              <th>День</th>
-              <th>Час</th>
-              <th>Дії</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lessons.map((lesson) => (
-              <tr key={lesson._id}>
-                <td>{lesson.subject}</td>
-                <td>{lesson.group_id?.name || '-'}</td>
-                <td>{lesson.teacher_id?.name || '-'}</td>
-                <td>{DAY_OPTIONS.find((day) => day.value === lesson.day_of_week)?.label || '-'}</td>
-                <td>{lesson.start_time && lesson.end_time ? `${lesson.start_time} - ${lesson.end_time}` : '-'}</td>
-                <td className="actions-inline">
-                  {(user.role === 'admin' || user.role === 'teacher') && (
-                    <>
-                      <button onClick={() => setSelectedLessonId(lesson._id)}>Вибрати</button>
-                      <button type="button" onClick={() => loadSessionPanel(lesson._id)}>
-                        {sessionPanelId === lesson._id ? 'Сховати сесії' : 'Сесії'}
-                      </button>
-                      <button type="button" onClick={() => loadMatrix(lesson._id)}>
-                        {matrixLessonId === lesson._id ? 'Сховати звіт' : 'Звіт'}
-                      </button>
-                      {user.role === 'admin' && (
-                        <button className="danger" onClick={() => deleteLesson(lesson._id)}>Видалити</button>
-                      )}
-                    </>
-                  )}
-                  {user.role === 'student' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => markAttendance({ lesson_id: lesson._id })}
-                        disabled={!lesson.is_active_now}
-                        title={lesson.is_active_now ? 'Відмітитись на поточному занятті' : 'Відмітка доступна лише під час поточного заняття'}
-                      >
-                        {lesson.is_active_now ? 'Відмітитись' : 'Неактивно'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => loadReport(lesson._id)}
-                      >
-                        {reportLessonId === lesson._id ? 'Сховати звіт' : 'Звіт'}
-                      </button>
-                    </>
-                  )}
-                </td>
+      <div className="card">
+        <h3>Список занять</h3>
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Предмет</th>
+                <th>Група</th>
+                <th>Викладач</th>
+                <th>День</th>
+                <th>Час</th>
+                <th>Дії</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {lessons.map((lesson) => (
+                <tr key={lesson._id}>
+                  <td>{lesson.subject}</td>
+                  <td>{lesson.group_id?.name || '-'}</td>
+                  <td>{lesson.teacher_id?.name || '-'}</td>
+                  <td>{DAY_OPTIONS.find((day) => day.value === lesson.day_of_week)?.label || '-'}</td>
+                  <td>{lesson.start_time && lesson.end_time ? `${lesson.start_time} - ${lesson.end_time}` : '-'}</td>
+                  <td className="actions-inline">
+                    {(user.role === 'admin' || user.role === 'teacher') && (
+                      <>
+                        {canManageAttendance && (
+                          <button
+                            type="button"
+                            className={selectedLessonId === lesson._id ? 'secondary' : ''}
+                            onClick={async () => {
+                              if (selectedLessonId === lesson._id) {
+                                setSelectedLessonId('');
+                                setAttendanceSessions([]);
+                                setAttendanceSessionId('');
+                                return;
+                              }
+                              setSelectedLessonId(lesson._id);
+                              setAttendanceSessionId('');
+                              try {
+                                const res = await lessonSessionsApi.byLesson(lesson._id);
+                                setAttendanceSessions(res.data.data || []);
+                              } catch (_e) {
+                                setAttendanceSessions([]);
+                              }
+                            }}
+                          >
+                            {selectedLessonId === lesson._id ? 'Обрано ✓' : 'Вибрати'}
+                          </button>
+                        )}
+                        <button type="button" onClick={() => loadSessionPanel(lesson._id)}>
+                          {sessionPanelId === lesson._id ? 'Сховати сесії' : 'Сесії'}
+                        </button>
+                        <button type="button" onClick={() => loadMatrix(lesson._id)}>
+                          {matrixLessonId === lesson._id ? 'Сховати звіт' : 'Звіт'}
+                        </button>
+                        {user.role === 'admin' && (
+                          <button className="danger" onClick={() => deleteLesson(lesson._id)}>Видалити</button>
+                        )}
+                      </>
+                    )}
+                    {user.role === 'student' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => markAttendance({ lesson_id: lesson._id })}
+                          disabled={!lesson.is_active_now}
+                          title={lesson.is_active_now ? 'Відмітитись на поточному занятті' : 'Відмітка доступна лише під час поточного заняття'}
+                        >
+                          {lesson.is_active_now ? 'Відмітитись' : 'Неактивно'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => loadReport(lesson._id)}
+                        >
+                          {reportLessonId === lesson._id ? 'Сховати звіт' : 'Звіт'}
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {user.role === 'student' && (
@@ -369,19 +400,25 @@ const Lessons = () => {
         );
       })()}
 
-      {(user.role === 'admin' || user.role === 'teacher') && (
+      {canManageAttendance && (
         <form
           className="card"
           onSubmit={(e) => {
             e.preventDefault();
             const form = new FormData(e.currentTarget);
+            const chosenSession = attendanceSessions.find((s) => s._id === attendanceSessionId);
             markAttendance({
               lesson_id: selectedLessonId,
               student_id: form.get('student_id'),
+              date: chosenSession?.date,
             });
           }}
         >
           <h3>Відмітка присутності</h3>
+          {selectedLessonId
+            ? <p className="muted">Обране заняття: <strong>{lessons.find((l) => l._id === selectedLessonId)?.subject || '—'}</strong></p>
+            : <p className="muted">Спочатку оберіть заняття кнопкою «Вибрати» у таблиці вище.</p>
+          }
           <div className="form-grid">
             <select name="student_id" required defaultValue="">
               <option value="">Оберіть студента</option>
@@ -391,7 +428,19 @@ const Lessons = () => {
                 </option>
               ))}
             </select>
-            <button type="submit" disabled={!selectedLessonId}>Зберегти</button>
+            <select
+              value={attendanceSessionId}
+              onChange={(e) => setAttendanceSessionId(e.target.value)}
+              required
+            >
+              <option value="">Оберіть сесію (дату заняття)</option>
+              {attendanceSessions.map((s) => (
+                <option key={s._id} value={s._id}>
+                  {new Date(s.date).toLocaleDateString('uk-UA', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </option>
+              ))}
+            </select>
+            <button type="submit" disabled={!selectedLessonId || !attendanceSessionId}>Зберегти</button>
           </div>
         </form>
       )}
@@ -473,7 +522,7 @@ const Lessons = () => {
                           {new Date(s.date).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' })}
                         </th>
                       ))}
-                      <th>% присутності</th>
+                      <th>Присутність</th>
                     </tr>
                   </thead>
                   <tbody>

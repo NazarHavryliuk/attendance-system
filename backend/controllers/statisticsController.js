@@ -15,6 +15,16 @@ const ensureStudentAccess = async (requestUser, studentId) => {
     return { error: 'Access denied', code: 403 };
   }
 
+  if (requestUser.role === 'teacher') {
+    const hasAccess = await Lesson.exists({
+      group_id: student.group_id?._id || student.group_id,
+      teacher_id: requestUser.id,
+    });
+    if (!hasAccess) {
+      return { error: 'Access denied', code: 403 };
+    }
+  }
+
 
 
   return { student };
@@ -24,6 +34,13 @@ const ensureGroupAccess = async (requestUser, groupId) => {
   const group = await Group.findById(groupId);
   if (!group) {
     return { error: 'Group not found', code: 404 };
+  }
+
+  if (requestUser.role === 'teacher') {
+    const hasAccess = await Lesson.exists({ group_id: groupId, teacher_id: requestUser.id });
+    if (!hasAccess) {
+      return { error: 'Access denied', code: 403 };
+    }
   }
 
 
@@ -202,24 +219,46 @@ const getLessonReport = async (req, res, next) => {
       }
     }
 
-    const students = await Student.find({ group_id: lesson.group_id._id }).sort({ name: 1 });
-    const records = await Attendance.find({ lesson_id: lessonId });
+    const [students, sessions, records] = await Promise.all([
+      Student.find({ group_id: lesson.group_id._id }).sort({ name: 1 }),
+      LessonSession.find({ lesson_id: lessonId }).sort({ date: 1 }).lean(),
+      Attendance.find({ lesson_id: lessonId }).select('student_id date').lean(),
+    ]);
 
-    const attendedByStudent = new Map();
-    records.forEach((record) => {
-      attendedByStudent.set(String(record.student_id), true);
+    const sessionDateKeys = new Set(
+      sessions.map((session) => new Date(session.date).toISOString().slice(0, 10))
+    );
+
+    // attendedDatesByStudent[studentId] = Set of session dates where student has attendance
+    const attendedDatesByStudent = new Map();
+    for (const record of records) {
+      const dateKey = new Date(record.date).toISOString().slice(0, 10);
+      if (!sessionDateKeys.has(dateKey)) continue;
+
+      const sid = String(record.student_id);
+      if (!attendedDatesByStudent.has(sid)) {
+        attendedDatesByStudent.set(sid, new Set());
+      }
+      attendedDatesByStudent.get(sid).add(dateKey);
+    }
+
+    const totalSessions = sessions.length;
+    const rows = students.map((student) => {
+      const attendedSessions = attendedDatesByStudent.get(String(student._id))?.size || 0;
+      return {
+        studentId: student._id,
+        studentName: student.name,
+        attendedSessions,
+        totalSessions,
+        attendanceRate: totalSessions > 0 ? Math.round((attendedSessions / totalSessions) * 100) : null,
+      };
     });
-
-    const rows = students.map((student) => ({
-      studentId: student._id,
-      studentName: student.name,
-      status: attendedByStudent.get(String(student._id)) ? 'present' : 'absent',
-    }));
 
     return res.json({
       success: true,
       data: {
         lesson,
+        totalSessions,
         rows,
       },
     });
@@ -237,11 +276,35 @@ const getStudentSubjectReport = async (req, res, next) => {
       return res.status(access.code).json({ success: false, message: access.error });
     }
 
-    const lessons = await Lesson.find({ group_id: access.student.group_id }).select('_id subject');
+    const lessons = await Lesson.find({ group_id: access.student.group_id }).select('_id subject').lean();
     const lessonIds = lessons.map((lesson) => lesson._id);
-    const attended = await Attendance.find({ student_id: id, lesson_id: { $in: lessonIds } }).select('lesson_id');
+    const [sessions, attended] = await Promise.all([
+      LessonSession.find({ lesson_id: { $in: lessonIds } }).select('lesson_id date').lean(),
+      Attendance.find({ student_id: id, lesson_id: { $in: lessonIds } }).select('lesson_id date').lean(),
+    ]);
 
-    const attendedLessonIds = new Set(attended.map((record) => String(record.lesson_id)));
+    const sessionDatesByLesson = new Map();
+    for (const session of sessions) {
+      const lessonKey = String(session.lesson_id);
+      const dateKey = new Date(session.date).toISOString().slice(0, 10);
+      if (!sessionDatesByLesson.has(lessonKey)) {
+        sessionDatesByLesson.set(lessonKey, new Set());
+      }
+      sessionDatesByLesson.get(lessonKey).add(dateKey);
+    }
+
+    const attendedDatesByLesson = new Map();
+    for (const record of attended) {
+      const lessonKey = String(record.lesson_id);
+      const dateKey = new Date(record.date).toISOString().slice(0, 10);
+      const validSessionDates = sessionDatesByLesson.get(lessonKey);
+      if (!validSessionDates?.has(dateKey)) continue;
+      if (!attendedDatesByLesson.has(lessonKey)) {
+        attendedDatesByLesson.set(lessonKey, new Set());
+      }
+      attendedDatesByLesson.get(lessonKey).add(dateKey);
+    }
+
     const bySubject = {};
 
     lessons.forEach((lesson) => {
@@ -250,17 +313,18 @@ const getStudentSubjectReport = async (req, res, next) => {
         bySubject[subject] = { subject, total: 0, present: 0, absent: 0, attendanceRate: 0 };
       }
 
-      bySubject[subject].total += 1;
-      if (attendedLessonIds.has(String(lesson._id))) {
-        bySubject[subject].present += 1;
-      } else {
-        bySubject[subject].absent += 1;
-      }
+      const lessonKey = String(lesson._id);
+      const totalSessions = sessionDatesByLesson.get(lessonKey)?.size || 0;
+      const presentSessions = attendedDatesByLesson.get(lessonKey)?.size || 0;
+
+      bySubject[subject].total += totalSessions;
+      bySubject[subject].present += presentSessions;
     });
 
     const result = Object.values(bySubject).map((item) => {
+      const absent = Math.max(item.total - item.present, 0);
       const attendanceRate = item.total > 0 ? Number(((item.present / item.total) * 100).toFixed(2)) : 0;
-      return { ...item, attendanceRate };
+      return { ...item, absent, attendanceRate };
     });
 
     return res.json({ success: true, data: result });

@@ -4,7 +4,8 @@ const Lesson = require('../models/Lesson');
 const Student = require('../models/Student');
 
 jest.mock('../models/Attendance', () => ({
-  findOneAndUpdate: jest.fn(),
+  findOne: jest.fn(),
+  create: jest.fn(),
 }));
 
 jest.mock('../models/Lesson', () => ({
@@ -67,7 +68,8 @@ describe('registerAttendance for student current lesson checks', () => {
       success: false,
       message: 'You can mark attendance only for the lesson currently in progress',
     });
-    expect(Attendance.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(Attendance.findOne).not.toHaveBeenCalled();
+    expect(Attendance.create).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -94,7 +96,8 @@ describe('registerAttendance for student current lesson checks', () => {
       group_id: 'group1',
     });
 
-    Attendance.findOneAndUpdate.mockResolvedValue({ _id: 'attendance1' });
+    Attendance.findOne.mockResolvedValue(null);
+    Attendance.create.mockResolvedValue({ _id: 'attendance1' });
 
     const req = {
       body: { lesson_id: 'lesson1' },
@@ -105,12 +108,64 @@ describe('registerAttendance for student current lesson checks', () => {
 
     await registerAttendance(req, res, next);
 
-    expect(Attendance.findOneAndUpdate).toHaveBeenCalledWith(
-      { lesson_id: 'lesson1', student_id: 'student1' },
-      { date: expect.any(Date) },
-      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
+    expect(Attendance.findOne).toHaveBeenCalledWith(
+      {
+        lesson_id: 'lesson1',
+        student_id: 'student1',
+        date: expect.any(Date),
+      }
+    );
+    expect(Attendance.create).toHaveBeenCalledWith(
+      {
+        lesson_id: 'lesson1',
+        student_id: 'student1',
+        date: expect.any(Date),
+      }
     );
     expect(res.status).toHaveBeenCalledWith(201);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('does not create duplicate attendance for same lesson/student/date', async () => {
+    jest.setSystemTime(new Date('2026-04-28T10:15:00')); // Tuesday
+
+    Lesson.findById.mockResolvedValue({
+      _id: 'lesson1',
+      group_id: 'group1',
+      day_of_week: 'tuesday',
+      start_time: '10:00',
+      end_time: '11:30',
+      date: new Date('2026-04-28T10:00:00'),
+    });
+
+    Student.findOne.mockResolvedValue({
+      _id: 'student1',
+      user_id: 'user-student',
+      group_id: 'group1',
+    });
+
+    Student.findById.mockResolvedValue({
+      _id: 'student1',
+      group_id: 'group1',
+    });
+
+    Attendance.findOne.mockResolvedValue({ _id: 'existing-attendance' });
+
+    const req = {
+      body: { lesson_id: 'lesson1' },
+      user: { id: 'user-student', role: 'student' },
+    };
+    const res = createMockRes();
+    const next = jest.fn();
+
+    await registerAttendance(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'Attendance for this student and session already exists',
+    });
+    expect(Attendance.create).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
   });
 });

@@ -50,24 +50,26 @@ const Profile = () => {
 
   const currentPhoto = photoPreview || user?.photo_url;
 
-  return (
-    <section className="page">
-      <h2>Мій профіль</h2>
-
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-        <div>
-          {currentPhoto
-            ? <img src={currentPhoto} alt="avatar" style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary)' }} />
-            : <div style={{ width: 100, height: 100, borderRadius: '50%', background: '#e0e0e0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>👤</div>
-          }
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} />
-          <button onClick={uploadPhoto}>Зберегти фото</button>
-        </div>
+  const photoPanel = (
+    <article className="card profile-card">
+      <h3>Фото профілю</h3>
+      <div className="profile-avatar-wrap">
+        {currentPhoto
+          ? <img src={currentPhoto} alt="avatar" className="profile-avatar" />
+          : <div className="profile-avatar-empty">👤</div>
+        }
       </div>
+      <div className="profile-controls">
+        <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} />
+        <button type="button" onClick={uploadPhoto}>Зберегти фото</button>
+      </div>
+    </article>
+  );
 
-      <form className="card auth-box" onSubmit={submit}>
+  const passwordPanel = (
+    <article className="card profile-card">
+      <h3>Безпека</h3>
+      <form className="profile-password-form" onSubmit={submit}>
         <input
           type="password"
           placeholder="Поточний пароль"
@@ -82,10 +84,21 @@ const Profile = () => {
           onChange={(e) => setNewPassword(e.target.value)}
           required
         />
-        {message && <p className="success">{message}</p>}
-        {error && <p className="error">{error}</p>}
         <button type="submit">Оновити пароль</button>
       </form>
+    </article>
+  );
+
+  return (
+    <section className="page">
+      <h2 className="profile-title">Мій профіль</h2>
+      <div className="profile-grid">
+        {photoPanel}
+        {passwordPanel}
+      </div>
+
+      {message && <p className="success">{message}</p>}
+      {error && <p className="error">{error}</p>}
     </section>
   );
 };
