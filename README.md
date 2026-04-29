@@ -144,7 +144,7 @@ Frontend запускається на `http://localhost:5173`.
 ## 6. Опис БД (MongoDB колекції)
 - `users`: name, email, password(hash), role(admin/teacher/student), isActive
 - `groups`: name, year, teacher_id
-- `students`: user_id, name, email, group_id
+- `students`: user_id, name, email,  group_id
 - `lessons`: subject, date, group_id, created_by
 - `attendance`: lesson_id, student_id, status
 
