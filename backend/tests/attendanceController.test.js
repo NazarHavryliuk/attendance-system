@@ -3,7 +3,7 @@ const Attendance = require('../models/Attendance');
 const Lesson = require('../models/Lesson');
 const Student = require('../models/Student');
 
-jest.mock('../models/Attfendance', () => ({
+jest.mock('../models/Attendance', () => ({
   findOneAndUpdate: jest.fn(),
 }));
 
