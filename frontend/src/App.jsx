@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import Home from './pages/Home';
 import Students from './pages/Students';
@@ -12,20 +12,41 @@ import { useAuth } from './context/AuthContext';
 
 const App = () => {
   const { user, isAuthenticated, logout } = useAuth();
+  const [theme, setTheme] = useState(() => localStorage.getItem('ui-theme') || 'light');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('ui-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   return (
     <div className="layout">
-      <header>
-        <h1>Attendance System</h1>
+      <header className="app-header">
+        <div className="brand-block">
+          <div className="brand-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" focusable="false">
+              <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 3v2h10V6H7zm5 5.2 3.1 3.1-1.4 1.4-1.7-1.7-2.2 2.2-1.4-1.4 3.6-3.6z" fill="currentColor" />
+            </svg>
+          </div>
+          <h1>Attendance System</h1>
+        </div>
         {isAuthenticated && (
-          <nav>
+          <nav className="main-nav">
             <NavLink to="/">Головна</NavLink>
             {(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'student') && <NavLink to="/lessons">Заняття</NavLink>}
             <NavLink to="/reports">Звіти</NavLink>
             {user?.role === 'admin' && <NavLink to="/admin">Адмін</NavLink>}
             <NavLink to="/profile">Профіль</NavLink>
-            <button className="danger" onClick={logout}>Вийти</button>
           </nav>
+        )}
+        {isAuthenticated && (
+          <div className="header-actions">
+            <button className="danger" onClick={logout}>Вийти</button>
+          </div>
         )}
       </header>
 
@@ -85,6 +106,10 @@ const App = () => {
           <Route path="*" element={<Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
         </Routes>
       </main>
+
+      <button type="button" className="theme-toggle-floating" onClick={toggleTheme}>
+        {theme === 'light' ? 'Темна тема' : 'Світла тема'}
+      </button>
     </div>
   );
 };
