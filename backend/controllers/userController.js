@@ -36,7 +36,7 @@ const updateUser = async (req, res, next) => {
     const user = await User.findOneAndUpdate(
       { _id: req.params.id, role: 'teacher' },
       { name: req.body.name, email: req.body.email, isActive: req.body.isActive },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!user) {

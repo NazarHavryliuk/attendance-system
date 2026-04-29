@@ -2,6 +2,7 @@ const Student = require('../models/Student');
 const Group = require('../models/Group');
 const User = require('../models/User');
 const Attendance = require('../models/Attendance');
+const Lesson = require('../models/Lesson');
 const { deleteFileByUrl } = require('../services/b2Service');
 
 const getStudents = async (req, res, next) => {
@@ -9,8 +10,9 @@ const getStudents = async (req, res, next) => {
     const query = {};
 
     if (req.user.role === 'teacher') {
-      const ownGroups = await Group.find({ teacher_id: req.user.id }).select('_id');
-      query.group_id = { $in: ownGroups.map((g) => g._id) };
+      const ownLessons = await Lesson.find({ teacher_id: req.user.id }).select('group_id').lean();
+      const ownGroupIds = [...new Set(ownLessons.map((lesson) => String(lesson.group_id)))];
+      query.group_id = { $in: ownGroupIds };
     }
 
     if (req.user.role === 'student') {
@@ -89,7 +91,7 @@ const updateStudent = async (req, res, next) => {
     }
 
     const updated = await Student.findByIdAndUpdate(id, payload, {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
     });
 

@@ -50,7 +50,7 @@ const updateGroup = async (req, res, next) => {
     if (year !== undefined) payload.year = year;
 
     const group = await Group.findByIdAndUpdate(req.params.id, payload, {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
     });
 
