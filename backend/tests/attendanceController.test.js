@@ -3,7 +3,7 @@ const Attendance = require('../models/Attendance');
 const Lesson = require('../models/Lesson');
 const Student = require('../models/Student');
 
-jest.mock('../models/Attendance', () => ({
+jest.mock('../models/Attfendance', () => ({
   findOneAndUpdate: jest.fn(),
 }));
 
@@ -106,8 +106,16 @@ describe('registerAttendance for student current lesson checks', () => {
     await registerAttendance(req, res, next);
 
     expect(Attendance.findOneAndUpdate).toHaveBeenCalledWith(
-      { lesson_id: 'lesson1', student_id: 'student1' },
-      { date: expect.any(Date) },
+      {
+        lesson_id: 'lesson1',
+        student_id: 'student1',
+        date: expect.any(Date),
+      },
+      {
+        lesson_id: 'lesson1',
+        student_id: 'student1',
+        date: expect.any(Date),
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
     );
     expect(res.status).toHaveBeenCalledWith(201);
