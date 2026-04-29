@@ -5,6 +5,7 @@ const connectDB = require('./config/db');
 const apiRoutes = require('./routes');
 const notFound = require('./middlewares/notFound');
 const errorHandler = require('./middlewares/errorHandler');
+const requireApiKeyIfConfigured = require('./middlewares/apiKey');
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.get('/', (req, res) => {
   res.json({ success: true, message: 'Attendance API is running' });
 });
 
+app.use('/api', requireApiKeyIfConfigured);
 app.use('/api', apiRoutes);
 
 app.use(notFound);
