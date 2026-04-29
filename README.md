@@ -11,6 +11,7 @@
 - CORS
 - REST API (JSON)
 
+
 ### Frontend
 - React + Vite
 - React Router
