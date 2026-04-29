@@ -2,6 +2,7 @@ const Student = require('../models/Student');
 const Group = require('../models/Group');
 const User = require('../models/User');
 const Attendance = require('../models/Attendance');
+const { deleteFileByUrl } = require('../services/b2Service');
 
 const getStudents = async (req, res, next) => {
   try {
@@ -113,6 +114,10 @@ const deleteStudent = async (req, res, next) => {
     if (!student) {
       return res.status(404).json({ success: false, message: 'Student not found' });
     }
+
+    const user = await User.findById(student.user_id).select('photo_url');
+    const photoUrls = [...new Set([student.photo_url, user?.photo_url].filter(Boolean))];
+    await Promise.all(photoUrls.map((url) => deleteFileByUrl(url)));
 
     await Promise.all([
       Attendance.deleteMany({ student_id: student._id }),
