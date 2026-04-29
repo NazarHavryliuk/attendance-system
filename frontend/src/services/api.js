@@ -1,6 +1,25 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const resolveApiBaseUrl = () => {
+  const hostname = window.location.hostname;
+  if (hostname.endsWith('.netlify.app')) {
+    return 'https://attendance-system-k2jn.onrender.com/api';
+  }
+
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) {
+    return envUrl;
+  }
+
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+  if (isLocal) {
+    return 'http://localhost:3000/api';
+  }
+
+  return 'http://localhost:3000/api';
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 const API_KEY = import.meta.env.VITE_API_KEY || '';
 
 const api = axios.create({
