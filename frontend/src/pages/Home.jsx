@@ -39,7 +39,7 @@ const features = [
 
 const roleLinks = {
   admin: [
-    { to: '/admin', label: 'Адмін-панель' },
+    { to: '/admin', label: 'Панель керування' },
     { to: '/reports', label: 'Звіти' },
     { to: '/lessons', label: 'Заняття' },
   ],
@@ -63,9 +63,9 @@ const Home = () => {
     <section className="hero home-page">
       <div className="home-hero-block">
         <div className="home-hero-badge">{ROLE_LABEL[user?.role] || user?.role}</div>
-        <h1 className="home-hero-title">Attendance System</h1>
+        <h1 className="home-hero-title">Система обліку відвідуваності</h1>
         <p className="home-hero-sub">
-          Ласкаво просимо, <strong>{user?.name}</strong>!<br />
+          Ви увійшли як: <strong>{user?.name}</strong> ({user?.role})<br />
           Цифрова система обліку відвідуваності для університету.
         </p>
         {links.length > 0 && (
