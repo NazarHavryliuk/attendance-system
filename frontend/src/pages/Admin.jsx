@@ -21,11 +21,11 @@ const PhotoUploadCell = ({ currentUrl, onUpload }) => {
   const src = preview || currentUrl;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-      {src
-        ? <img src={src} alt="photo" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
-        : <span style={{ fontSize: 24 }}>👤</span>}
-      <input ref={ref} type="file" accept="image/*" style={{ width: 110 }} onChange={handleChange} />
-      <button onClick={handleUpload} type="button">↑</button>
+      <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {src
+          ? <img src={src} alt="photo" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          : <span style={{ fontSize: 20, lineHeight: 1 }}>👤</span>}
+      </div>
     </div>
   );
 };
@@ -35,6 +35,8 @@ const Admin = () => {
   const [groups, setGroups] = useState([]);
   const [students, setStudents] = useState([]);
   const [studentSearch, setStudentSearch] = useState('');
+  const [teacherSearch, setTeacherSearch] = useState('');
+  const [groupSearch, setGroupSearch] = useState('');
   const [teacherForm, setTeacherForm] = useState({ name: '', email: '', password: '' });
   const [groupForm, setGroupForm] = useState({ name: '', year: 1 });
   const [studentForm, setStudentForm] = useState({ name: '', email: '', password: '', group_id: '' });
@@ -44,6 +46,19 @@ const Admin = () => {
   const filteredStudents = students.filter((student) => {
     if (!normalizedSearch) return true;
     return (student.name || '').toLowerCase().includes(normalizedSearch);
+  });
+
+  const normalizedTeacherSearch = teacherSearch.trim().toLowerCase();
+  const filteredTeachers = teachers.filter((t) => {
+    if (!normalizedTeacherSearch) return true;
+    return (t.name || '').toLowerCase().includes(normalizedTeacherSearch) ||
+           (t.email || '').toLowerCase().includes(normalizedTeacherSearch);
+  });
+
+  const normalizedGroupSearch = groupSearch.trim().toLowerCase();
+  const filteredGroups = groups.filter((g) => {
+    if (!normalizedGroupSearch) return true;
+    return (g.name || '').toLowerCase().includes(normalizedGroupSearch);
   });
 
   const loadData = async () => {
@@ -161,6 +176,16 @@ const Admin = () => {
         </div>
       </form>
 
+      <div className="card">
+        <h3>Фільтр викладачів</h3>
+        <input
+          type="text"
+          placeholder="Пошук за ім'ям або email"
+          value={teacherSearch}
+          onChange={(e) => setTeacherSearch(e.target.value)}
+        />
+      </div>
+
       <div className="table-wrapper">
         <table>
           <thead>
@@ -172,7 +197,7 @@ const Admin = () => {
             </tr>
           </thead>
           <tbody>
-            {teachers.map((teacher) => (
+            {filteredTeachers.map((teacher) => (
               <tr key={teacher._id}>
                 <td><PhotoUploadCell currentUrl={teacher.photo_url} onUpload={(file) => uploadTeacherPhoto(teacher._id, file)} /></td>
                 <td>{teacher.name}</td>
@@ -180,6 +205,9 @@ const Admin = () => {
                 <td><button className="danger" onClick={() => deleteTeacher(teacher._id)}>Видалити</button></td>
               </tr>
             ))}
+            {filteredTeachers.length === 0 && (
+              <tr><td colSpan={4}>Нічого не знайдено за цим фільтром</td></tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -193,6 +221,16 @@ const Admin = () => {
         </div>
       </form>
 
+      <div className="card">
+        <h3>Фільтр груп</h3>
+        <input
+          type="text"
+          placeholder="Пошук за назвою групи"
+          value={groupSearch}
+          onChange={(e) => setGroupSearch(e.target.value)}
+        />
+      </div>
+
       <div className="table-wrapper">
         <table>
           <thead>
@@ -203,13 +241,16 @@ const Admin = () => {
             </tr>
           </thead>
           <tbody>
-            {groups.map((group) => (
+            {filteredGroups.map((group) => (
               <tr key={group._id}>
                 <td>{group.name}</td>
                 <td>{group.year}</td>
                 <td><button className="danger" onClick={() => deleteGroup(group._id)}>Видалити</button></td>
               </tr>
             ))}
+            {filteredGroups.length === 0 && (
+              <tr><td colSpan={3}>Нічого не знайдено за цим фільтром</td></tr>
+            )}
           </tbody>
         </table>
       </div>
