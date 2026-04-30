@@ -42,6 +42,7 @@ const Lessons = () => {
   const [matrixLoading, setMatrixLoading] = useState(false);
   const [attendanceSessions, setAttendanceSessions] = useState([]);
   const [attendanceSessionId, setAttendanceSessionId] = useState('');
+  const [lessonSearch, setLessonSearch] = useState('');
 
   const loadData = async () => {
     try {
@@ -273,6 +274,13 @@ const Lessons = () => {
 
       <div className="card">
         <h3>Список занять</h3>
+        <input
+          type="text"
+          placeholder="Пошук за предметом, групою або викладачем"
+          value={lessonSearch}
+          onChange={(e) => setLessonSearch(e.target.value)}
+          style={{ marginBottom: '0.75rem' }}
+        />
         <div className="table-wrapper">
           <table>
             <thead>
@@ -286,7 +294,17 @@ const Lessons = () => {
               </tr>
             </thead>
             <tbody>
-              {lessons.map((lesson) => (
+              {lessons
+                .filter((lesson) => {
+                  const q = lessonSearch.trim().toLowerCase();
+                  if (!q) return true;
+                  return (
+                    (lesson.subject || '').toLowerCase().includes(q) ||
+                    (lesson.group_id?.name || '').toLowerCase().includes(q) ||
+                    (lesson.teacher_id?.name || '').toLowerCase().includes(q)
+                  );
+                })
+                .map((lesson) => (
                 <tr key={lesson._id}>
                   <td>{lesson.subject}</td>
                   <td>{lesson.group_id?.name || '-'}</td>
