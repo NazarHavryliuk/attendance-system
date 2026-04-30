@@ -1,0 +1,731 @@
+]633;E;printf '%s\\n' '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';2c3ba44b-536d-4617-8d79-da4e28931cad]633;C<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">РОЗРАХУНКОВО-ГРАФІЧНА РОБОТА</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">з дисципліни «Проєктування та розробка інформаційних систем»</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Тема: Серверна частина (backend) системи обліку відвідуваності студентів</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Титульні поля (заповнюються вручну):</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Заклад вищої освіти: ________________________________</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Кафедра: ___________________________________________</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Виконав(ла): ________________________________________</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Група: ______________________________________________</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Керівник: ___________________________________________</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Місто, рік: _________________________________________</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">МЕТА РОБОТИ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Метою розрахунково-графічної роботи є комплексний аналіз, технічний опис і обґрунтування серверної частини інформаційної системи обліку відвідуваності студентів, реалізованої в межах цього проєкту. У звіті детально розглянуто архітектуру backend-застосунку, структуру API, модель даних MongoDB, механізми автентифікації та авторизації, логіку attendance і статистики, інтеграцію з Backblaze B2, а також практичний підхід до розгортання на платформі Render. Окремо наведено розділи щодо валідації, обробки помилок, тестування, ризиків та рекомендацій подальшого розвитку.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">ВСТУП</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">У сучасних умовах цифровізації освіти критичним фактором якості інформаційної системи є її серверна частина. Саме backend визначає цілісність даних, коректність обчислень, політику безпеки та сталість функціонування при взаємодії багатьох користувачів одночасно. Для систем обліку відвідуваності ця роль особливо важлива, оскільки будь-яка помилка в логіці реєстрації присутності або доступу до даних може призвести до викривлення підсумкової статистики.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Проєкт, який аналізується в цій роботі, реалізує повний цикл роботи з даними про відвідуваність у форматі REST API. Backend підтримує три ролі користувачів (admin, teacher, student), має захищені endpoint-и, перевірки прав доступу, валідацію ID та вхідних параметрів, а також механізм зберігання зображень у зовнішньому хмарному сховищі Backblaze B2. Для production-сценарію передбачено деплой на Render і додатковий API key для запитів.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Ключова ідея поточної реалізації — сесійний підхід до attendance: відвідуваність фіксується не абстрактно «по заняттю», а відносно конкретної дати проведеної сесії. Такий підхід суттєво підвищує достовірність звітів і відповідає реальній логіці освітнього процесу.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 1: Загальна структура директорії backend]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">1. ПОСТАНОВКА ЗАДАЧІ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Основна задача backend-частини полягає у наданні надійного API для клієнтського застосунку з урахуванням доменних обмежень навчального процесу. Система повинна підтримувати:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- автентифікацію користувачів та розмежування прав доступу;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- керування викладачами, студентами, групами, заняттями та сесіями занять;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- реєстрацію відвідуваності студентів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- формування статистики та звітів по різних зрізах;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- керування профільними фото через зовнішнє сховище;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- роботу в локальному та production середовищі.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Функціональні та нефункціональні вимоги до backend:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">1) Безпека: захист endpoint-ів JWT і role-based контролем.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">2) Цілісність: заборона дублювання attendance-записів.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">3) Коректність: статистика має базуватися на фактичних lesson sessions.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">4) Прозорість: уніфікований формат API-відповідей.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">5) Підтримуваність: модульна структура з розділенням відповідальностей.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">6) Деплойність: можливість розгортання на Render.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">2. ТЕХНОЛОГІЧНИЙ СТЕК ТА ОБҐРУНТУВАННЯ ВИБОРУ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">2.1. Node.js + Express</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Node.js забезпечує продуктивне асинхронне середовище для I/O-орієнтованих web API. Express надає легку й гнучку систему маршрутизації, middleware-модель і простий інтеграційний шлях для REST сервісів.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">2.2. MongoDB + Mongoose</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">MongoDB зручна для гнучкого моделювання сутностей освітнього домену. Mongoose додає:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- схеми з валідацією;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- індекси;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- зв’язки через ObjectId;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- hooks та model methods.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">2.3. Безпекові бібліотеки</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- bcryptjs: хешування паролів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- jsonwebtoken: видача й перевірка токенів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- middleware auth/roles: контроль доступу;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- validateObjectId: рання валідація параметрів.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">2.4. Файлова підсистема</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- multer (memoryStorage) для multipart/form-data;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- @aws-sdk/client-s3 для S3-сумісної інтеграції з Backblaze B2.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">2.5. Тестовий стек</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Jest як тест-ранер;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Supertest для API тестування.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 2: package.json backend із залежностями]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">3. АРХІТЕКТУРА BACKEND-ЗАСТОСУНКУ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Архітектура реалізована за модульним принципом:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- config/db.js: підключення до MongoDB;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- models/: User, Student, Group, Lesson, LessonSession, Attendance;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- controllers/: прикладна логіка;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- routes/: маршрути endpoint-ів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- middlewares/: auth, apiKey, upload, validateObjectId, notFound, errorHandler;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- services/: statisticsService, b2Service;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- tests/: unit/integration тести.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Точка входу server.js виконує ініціалізацію middleware, підключення маршрутів та запуск сервера після connectDB(). Для API використовується загальний префікс /api. На цьому рівні може застосовуватися requireApiKeyIfConfigured.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Переваги такої архітектури:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- зрозуміла навігація по кодовій базі;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- легке написання тестів на рівні контролерів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- просте додавання нових endpoint-ів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- стабільний формат помилок через централізований errorHandler.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">4. ОПИС МОДЕЛІ ДАНИХ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">4.1. User</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Поля: name, email, password, role, isActive, photo_url.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Особливості:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- email унікальний;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- password має select: false;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- pre-save hook хешує пароль;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- comparePassword використовується для login.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">4.2. Student</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Поля: user_id, name, email, group_id, photo_url.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Особливості:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- user_id унікальний;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- email унікальний;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- group_id обов’язковий.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">4.3. Group</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Поля: name, year.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Особливості:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- name унікальний;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- year обмежено діапазоном 1..6.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">4.4. Lesson</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Поля: subject, group_id, teacher_id, day_of_week, start_time, end_time, created_by.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Особливості:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- day_of_week має enum;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- start_time та end_time перевіряються регулярним виразом HH:MM.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">4.5. LessonSession</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Поля: lesson_id, date, created_by.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Призначення: фіксація фактично проведеної пари в конкретний календарний день.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">4.6. Attendance</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Поля: lesson_id, student_id, date.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Ключова властивість: унікальний індекс на (lesson_id, student_id, date).</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 3: Колекції MongoDB та приклади документів]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">5. АВТЕНТИФІКАЦІЯ Й АВТОРИЗАЦІЯ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">5.1. Login</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">POST /api/auth/login:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- перевіряє email/password;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- знаходить user із password;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- перевіряє isActive;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- перевіряє пароль через bcrypt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- видає JWT (7 днів).</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">5.2. Поточний користувач</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/auth/me:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- повертає user;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- для student повертає studentProfile з group даними.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">5.3. Зміна пароля</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">PUT /api/auth/change-password:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- вимагає currentPassword/newPassword;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- перевіряє довжину нового пароля;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- зберігає новий хешований пароль.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">5.4. Bootstrap admin</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">POST /api/auth/bootstrap-admin:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- дозволяє створити першого admin одноразово;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- перевіряє bootstrapPassword через env змінну.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">5.5. Middleware auth</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">authenticate:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- перевіряє Bearer token;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- декодує JWT;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- додає req.user.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">authorizeRoles:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- дозволяє доступ лише зазначеним ролям.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">5.6. Optional API key</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">requireApiKeyIfConfigured:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- якщо API_ACCESS_KEY не заданий, локально перевірка пропускається;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- якщо заданий, вимагає x-api-key у кожному /api запиті.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 4: Приклад login і me запитів]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">6. КЕРУВАННЯ ВИКЛАДАЧАМИ, ГРУПАМИ, СТУДЕНТАМИ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">6.1. Викладачі (users)</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">userController реалізує get/create/update/delete.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Видалення викладача блокується, якщо він прив’язаний до груп. Також admin не може видалити власний акаунт.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">6.2. Групи</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">groupController реалізує:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- createGroup з перевіркою унікальності;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- updateGroup з валідацією;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- deleteGroup із забороною, якщо є студенти або заняття.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">6.3. Студенти</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">studentController:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- createStudent створює User(role=student) + Student;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- при збої другого кроку робить rollback (видаляє User);</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- updateStudent синхронізує поля name/email між Student і User;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- deleteStudent видаляє пов’язані attendance та фото.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 5: Операції керування users/groups/students]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">7. ЗАНЯТТЯ, СЕСІЇ ТА ВІДВІДУВАНІСТЬ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">7.1. Lessons</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">lessonController створює заняття з перевіркою day_of_week, HH:MM та умови start &lt; end. Також перевіряє існування group і teacher.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">7.2. Lesson sessions</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">lessonSessionController:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- створення сесії заняття;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- видалення сесії;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- перегляд сесій за lesson.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Дати нормалізуються до UTC-півночі.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">7.3. Attendance registration</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">attendanceController.registerAttendance виконує комплексні перевірки:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- lesson існує;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- для student: тільки власний профіль, тільки своя група, тільки під час активного заняття;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- для teacher: тільки власні заняття;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- student має належати групі заняття;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- date валідна;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- перевірка на дубль attendance.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">7.4. Антидублювання</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Захист реалізовано двома рівнями:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">1) логічна перевірка існуючого запису;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">2) unique index у БД.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 6: Помилка 409 при повторній реєстрації attendance]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">8. ЛОГІКА СТАТИСТИКИ ТА ЗВІТІВ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">8.1. Принцип</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Усі розрахунки будуються на фактичних lesson sessions. Attendance враховується лише для дат, які справді існують у sessions.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">8.2. getStudentStatistics</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">statisticsService:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- отримує lessons групи студента;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- отримує sessions по lesson_id;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- отримує attendance студента;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- формує total/present/absent/attendanceRate.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">8.3. Statistics endpoints</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">statisticsController:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- /statistics/:studentId</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- /report/student/:id</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- /report/student/:id/by-subject</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- /report/group/:groupId</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- /report/group/:groupId/attendance-table</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- /report/lesson/:lessonId</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">8.4. Доступ до аналітики</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">ensureStudentAccess / ensureGroupAccess гарантують, що teacher/student бачать тільки дозволені дані.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">8.5. Практична цінність</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Сесійний підхід дозволяє уникнути систематичних помилок у звітах і формує реалістичну аналітику для навчального процесу.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 7: Приклад звіту по предметах]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">9. ІНТЕГРАЦІЯ З BACKBLAZE B2</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">9.1. Конфігурація</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Використовуються env-параметри:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- BACKBLAZE_ENDPOINT_URL</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- BACKBLAZE_BUCKET_NAME</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- BACKBLAZE_ACCESS_KEY</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- BACKBLAZE_SECRET_KEY</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Підтримано також legacy B2_* назви.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">9.2. b2Service</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Реалізовано:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- assertConfig;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- getRegionFromEndpoint;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- uploadFile;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- deleteFileByUrl;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- normalizeB2Error.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">9.3. Upload маршрути</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- POST /api/upload/user/:id</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- POST /api/upload/student/:id</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">В обох сценаріях нове фото оновлює photo_url, а старий файл видаляється з B2.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">9.4. Переваги такого рішення</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- файли не зберігаються локально на сервері;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- зручне cloud-зберігання;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- проста очистка застарілих медіа;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- готовність до горизонтального масштабування.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 8: Backblaze bucket, ключі і структура папок]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">10. РОЗГОРТАННЯ НА RENDER</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">10.1. Чому Render</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Render надає простий шлях production-деплою Node.js backend без складної ручної інфраструктури.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">10.2. Налаштування сервісу</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Build command: npm install</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Start command: npm start</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Root: backend</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Env: MONGO_URI, JWT_SECRET, API_ACCESS_KEY, BACKBLAZE_*</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">10.3. Технічна готовність коду</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- PORT береться з process.env.PORT;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- є health endpoint GET /;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- API key middleware вже вбудований;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- frontend орієнтований на onrender домен.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">10.4. Післядеплойна перевірка</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- health endpoint;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- login/me;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- report endpoint;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- upload endpoint.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">10.5. Рекомендації для production</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- CORS whitelist;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- rate limiting;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- ротація ключів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- моніторинг логів і alerting.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 9: Render dashboard із сервісом backend]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">11. ОБРОБКА ПОМИЛОК ТА ВАЛІДАЦІЯ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">11.1. notFound</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Невідомі маршрути повертають структуровану 404-відповідь.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">11.2. errorHandler</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Усі помилки повертаються як JSON зі success=false. У development може віддаватися стек.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">11.3. validateObjectId</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Запобігає обробці невалідних ID у контролерах.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">11.4. Модельні валідації</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Mongoose схеми перевіряють формат і обмеження полів на рівні БД-моделі.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">12. ТЕСТУВАННЯ BACKEND</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">12.1. Інструменти</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Jest та Supertest забезпечують автоматичну перевірку критичних сценаріїв.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">12.2. Покриті сценарії</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- health/404;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- attendance правила;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- статистика і сесійні розрахунки;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- upload контролер;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- cleanup сценарії.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">12.3. Практична користь</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Тести фіксують бізнес-правила та запобігають регресіям при подальших змінах.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 10: Результати запуску тестів]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">13. АНАЛІЗ РИЗИКІВ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">13.1. Ризик дублювання attendance</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Знято через перевірку existing + unique index.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">13.2. Ризик timezone помилок</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Знято через нормалізацію дат до UTC.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">13.3. Ризик витоку секретів</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Має покриватися політикою env-only і ротацією ключів.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">13.4. Ризик несанкціонованого доступу</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Знижується через JWT, role middleware, optional API key.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">13.5. Ризик деградації звітів при великих даних</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Може бути знижений індексами, агрегаціями і кешуванням.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">14. ПОРІВНЯННЯ ПІДХОДІВ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">14.1. Монолітний backend vs мікросервіси</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Для навчального РГР монолітний варіант є виправданим: простіше розробка, деплой, підтримка.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">14.2. MongoDB vs SQL</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">MongoDB у цьому контексті швидше для старту й ітеративного розвитку схеми.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">14.3. Backblaze B2 vs локальний диск</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">B2 значно кращий для cloud-сценарію, особливо при деплої на Render.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">14.4. Render vs власний VPS</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Render зменшує DevOps-навантаження та пришвидшує публікацію навчального проєкту.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">15. ПРАКТИЧНИЙ СЦЕНАРІЙ ВЕРИФІКАЦІЇ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">1) Запустити backend.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">2) Перевірити GET /.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">3) Виконати login.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">4) Створити lesson session.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">5) Внести attendance.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">6) Спробувати дубль attendance (очікувати 409).</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">7) Перевірити report endpoint-и.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">8) Перевірити upload до Backblaze.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">9) Перевірити працездатність деплою на Render.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 11: Комплексна схема перевірки]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">16. НАПРЯМКИ ПОДАЛЬШОГО РОЗВИТКУ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">- Додати rate limiting для auth endpoint-ів.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Додати централізований аудит дій користувачів.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Розширити integration-тести на рольові edge cases.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Додати пагінацію й фільтри для великих таблиць.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Налаштувати CI pipeline з автозапуском тестів.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Посилити observability (метрики, трейсинг, error aggregation).</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Додати механізм refresh token.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- Підготувати окремі конфігурації dev/stage/prod.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">17. РОЗШИРЕНЕ ПІДСУМКОВЕ УЗАГАЛЬНЕННЯ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Поточна backend-реалізація демонструє практично важливий рівень інженерної зрілості:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">1) Архітектура модульна і читабельна.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">2) Валідації та контроль доступу реалізовані системно.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">3) Attendance-логіка захищена від дублювання й часових розбіжностей.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">4) Звітність ґрунтується на фактичних sessions.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">5) Зовнішнє файлове сховище Backblaze інтегроване коректно.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">6) Деплой на Render підготовлено на рівні коду і конфігурації.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">7) Наявні тести критичних сценаріїв.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Усе це робить backend не просто навчальною імітацією, а цілісним API-рішенням, яке можна розвивати далі до production-рівня.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">18. ДЕТАЛІЗОВАНИЙ ОПИС ENDPOINT-ІВ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">18.1. Auth endpoints</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">POST /api/auth/login</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Призначення: вхід користувача та отримання токена.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Запит: email, password.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Успіх: 200 + token + user.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Помилки:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- 400: відсутні поля;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- 401: неправильні дані;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- 403: акаунт неактивний.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/auth/me</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Призначення: отримання профілю поточного користувача.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Вимагає: Bearer token.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Успіх: 200 + user (+ studentProfile, якщо роль student).</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Помилки: 401 або 404.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">PUT /api/auth/change-password</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Призначення: зміна пароля поточного користувача.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Перевірки:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- наявність currentPassword/newPassword;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- мінімальна довжина нового пароля;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- збіг поточного пароля.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">POST /api/auth/bootstrap-admin</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Призначення: одноразова ініціалізація адміністратора.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Використовується на першому запуску.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">18.2. Groups endpoints</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/groups</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Повертає перелік груп. Для student — тільки власну групу.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">POST /api/groups/register</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Створює групу з name та year.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">PUT /api/groups/:id</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Оновлює name/year.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">DELETE /api/groups/:id</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Видаляє групу, якщо немає прив’язаних студентів і занять.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">18.3. Students endpoints</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/students</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">admin: усі студенти;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">teacher: студенти своїх груп (через lessons);</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">student: тільки власний профіль.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">POST /api/students/register</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Створює user(role=student) і student profile.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">PUT /api/students/:id</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Оновлює дані student і синхронізує поля user.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">DELETE /api/students/:id</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Виконує каскадну очистку attendance/user/photo.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">18.4. Lessons endpoints</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/lessons</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">admin: всі lessons;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">teacher: lessons, де teacher_id = req.user.id;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">student: lessons власної group.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">POST /api/lessons/register</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Створення lesson із суворими перевірками часу і дня.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">DELETE /api/lessons/:id</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Видалення lesson із пов’язаними attendance.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">18.5. Lesson sessions endpoints</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">POST /api/lesson-sessions</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin, teacher.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Створює фактичну сесію заняття.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/lesson-sessions/:lessonId</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin, teacher, student.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Повертає перелік сесій заняття з перевіркою доступу.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">DELETE /api/lesson-sessions/:id</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin, teacher.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Teacher може видаляти тільки сесії власних lessons.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">18.6. Attendance endpoints</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">POST /api/attendance/register</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Доступ: admin, teacher, student.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Включає найсуворіший контроль прикладних правил.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/attendance/:lessonId</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Повертає attendance по lesson з role-based обмеженнями.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/attendance/lesson-report/:lessonId</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Формує табличний attendance-звіт по lesson.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">18.7. Report endpoints</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/statistics/:studentId</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Індивідуальна статистика студента.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/report/student/:id</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Детальний студентський звіт.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/report/student/:id/by-subject</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Агрегація студентської статистики за предметами.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/report/group/:groupId</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Груповий підсумковий звіт.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/report/group/:groupId/attendance-table</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Матриця студент × заняття з відсотками.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">GET /api/report/lesson/:lessonId</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Звіт про відвідуваність конкретного заняття.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 12: Postman-колекція endpoint-ів backend]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">19. ПОГЛИБЛЕНИЙ ОПИС BACKBLAZE B2 ІНТЕГРАЦІЇ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">19.1. Архітектурна роль B2</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Backblaze B2 використовується як окремий інфраструктурний компонент для медіа-файлів. Завдяки цьому backend не витрачає ресурси на локальне файлове зберігання, а БД не розростається через binary-дані.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">19.2. Чому S3-сумісний підхід зручний</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Використання @aws-sdk/client-s3 для B2 через endpoint дозволяє:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- застосовувати добре відпрацьований SDK;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- зберігати переносимість на інші S3-compatible сервіси;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- отримати стабільний API для upload/delete.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">19.3. Формування ключів об’єктів</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">У b2Service ключ генерується як folder/uuid.ext. Така схема:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- практично виключає колізії;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- не розкриває оригінальні імена файлів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- підтримує логічне групування за папками.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">19.4. Нормалізація помилок B2</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Сервіс трансформує типові low-level помилки в зрозумілі бізнес-повідомлення:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- mismatch ключів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- недостатні права;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- некоректний payload.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Це пришвидшує діагностику в production.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">19.5. Логіка заміни фото</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Перед завантаженням нового фото backend викликає deleteFileByUrl для старого об’єкта. Така поведінка:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- скорочує витрати на зберігання;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- запобігає накопиченню orphan-об’єктів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- спрощує адміністрування bucket.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">19.6. Безпекові рекомендації для B2</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- використати окремий application key із мінімальними правами;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- включити регулярну ротацію ключів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- розділити bucket-и для різних середовищ;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- обмежити публічний доступ згідно політики проєкту.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 13: Конфігурація Backblaze bucket і ключів доступу]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">20. РОЗГОРТАННЯ НА RENDER: ПРАКТИЧНИЙ ПЛАН</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">20.1. Підготовка репозиторію</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Перед деплоєм потрібно переконатися, що:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- backend стартує командою npm start;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- сервер читає PORT із env;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- усі секрети винесені у змінні середовища.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">20.2. Створення Web Service</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">У Render налаштовується сервіс із root = backend. Після цього:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- build command: npm install;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- start command: npm start;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- auto deploy за git push.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">20.3. Обов’язкові env змінні</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- MONGO_URI</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- JWT_SECRET</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- API_ACCESS_KEY (за потреби)</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- BACKBLAZE_ACCESS_KEY</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- BACKBLAZE_SECRET_KEY</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- BACKBLAZE_BUCKET_NAME</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- BACKBLAZE_ENDPOINT_URL</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">20.4. Контроль запуску</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Після деплою перевірити:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- логи старту (MongoDB connected);</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- GET /;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- один захищений endpoint із Bearer token.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">20.5. Типові deployment-проблеми</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">1) Неправильний MONGO_URI.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">2) Невірний JWT_SECRET.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">3) Помилкові B2 ключі.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">4) Відсутній API key при увімкненій перевірці.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">20.6. Production hardening на Render</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- увімкнути health checks;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- вести логи помилок централізовано;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- контролювати частоту помилок 401/403/5xx;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- обмежити CORS whitelist.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 14: Render logs та статус сервісу]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">21. СЦЕНАРІЇ ВИКОРИСТАННЯ СИСТЕМИ (З ПОЗИЦІЇ BACKEND)</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">21.1. Сценарій «Перший запуск»</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">1) bootstrap-admin;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">2) login admin;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">3) створення викладача;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">4) створення групи;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">5) створення студента;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">6) створення lesson;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">7) створення lesson session;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">8) реєстрація attendance;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">9) отримання первинних звітів.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">21.2. Сценарій «Робота викладача»</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">teacher отримує власні lessons, відкриває sessions, переглядає attendance і формує звітність по своїх групах.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">21.3. Сценарій «Робота студента»</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">student бачить тільки власні lessons/звіти, може відмічатися лише у валідний часовий інтервал активного заняття.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">21.4. Сценарій «Актуалізація фото профілю»</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">upload endpoint оновлює URL фото, видаляє старий файл у B2 і синхронізує посилання між User та Student (для ролі student).</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">21.5. Сценарій «Адміністративна аналітика»</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">admin формує групові та предметні звіти для оцінки відвідуваності, виявлення ризикових груп і дисциплін.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 15: Послідовність запитів одного повного сценарію]</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">22. МЕТОДИКА ПЕРЕВІРКИ ЯКОСТІ РІШЕННЯ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">22.1. Функціональна перевірка</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Перевіряється коректність усіх CRUD і report endpoint-ів.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">22.2. Перевірка доступу</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Перевіряється, що кожна роль має тільки дозволені операції.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">22.3. Перевірка цілісності attendance</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Сценарій з дублюванням повинен стабільно повертати 409.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">22.4. Перевірка статистики</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Результати звітів зіставляються з вручну підрахованими session/attendance даними.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">22.5. Перевірка B2 інтеграції</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Перевіряється upload, оновлення URL, і видалення попередніх файлів.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">22.6. Перевірка deployment</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Перевіряється запуск на Render, доступність endpoint-ів і стабільність логів.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">23. ЕКОНОМІЯ ЧАСУ ТА ПРАКТИЧНА ЕФЕКТИВНІСТЬ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Навіть у навчальному контексті автоматизована backend-система дає реальну операційну ефективність:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- менше ручних помилок;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- швидше формування звітів;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- єдина точка істини для даних;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- контрольованість змін і операцій.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Для адміністраторів це означає швидкий доступ до групових показників. Для викладачів — простий механізм ведення attendance без паперових журналів. Для студентів — прозорий доступ до власної статистики.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">24. ПІДГОТОВКА ДО ЗАХИСТУ РГР</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Рекомендована структура усного захисту:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">1) Коротко: задача і мета.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">2) Архітектура backend.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">3) Модель даних.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">4) Демонстрація auth/roles.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">5) Attendance і антидублювання.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">6) Звіти по sessions.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">7) Backblaze інтеграція.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">8) Render deployment.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">9) Тести і висновки.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Такий порядок підкреслює, що проєкт не лише «працює», а й методично обґрунтований і технічно якісний.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">25. ФІНАЛЬНЕ УЗАГАЛЬНЕННЯ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Проведений аналіз показує, що backend цього проєкту є цілісним, функціонально завершеним і придатним до розширення. Він містить:</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- чітку архітектуру;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- коректну модель доступу;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- надійний attendance-механізм;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- валідну аналітичну підсистему;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- інтеграції з Backblaze і Render;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">- базу для подальшого підвищення production-рівня.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Отже, з точки зору вимог РГР, серверна частина проєкту достатньо глибоко реалізована і добре підходить як приклад прикладної інформаційної системи з реальними бізнес-правилами.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">ВИСНОВОК</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">У результаті виконання розрахунково-графічної роботи було детально опрацьовано backend-частину системи обліку відвідуваності студентів на основі реального проєкту в цій директорії. Проаналізовано архітектуру, модель даних, прикладну логіку, механізми безпеки, API-маршрути, підсистему статистики, інтеграцію з Backblaze B2 та підхід до деплою на Render.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Підтверджено, що серверна частина реалізує ключові вимоги предметної області: коректний контроль ролей, достовірний облік attendance, захист від дублювань, узгоджене формування звітів та обробку типових помилок. Інтеграція з Backblaze забезпечує життєздатне зберігання медіа у хмарі, а орієнтація на Render робить рішення готовим до публічного використання.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">Отже, мета роботи досягнута. Розроблений backend є технічно обґрунтованим, функціонально завершеним і придатним до подальшого розвитку в напрямку production-ready системи.</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">ДОДАТКОВІ ПОЛЯ ДЛЯ СКРІНШОТІВ</w:t></w:r></w:p>
+    <w:p/>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 12: /api/auth/me]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 13: /api/report/student/:id/by-subject]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 14: Upload user photo]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 15: Render logs]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">[МІСЦЕ ДЛЯ СКРІНШОТА 16: Attendance індекс у MongoDB]</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>
+  </w:body>
+</w:document>
